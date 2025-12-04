@@ -1,0 +1,408 @@
+/* ---------------- Base layout ---------------- */
+
+:root {
+  --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+               "Liberation Mono", "Courier New", monospace;
+  --code-size: 14px;
+  --code-line-height: 1.5;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+               sans-serif;
+  background: radial-gradient(circle at top, #e5f0ff, #f3f4f6 55%, #e5e7eb);
+  color: #111827;
+}
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.container {
+  width: 100%;
+  max-width: 1100px;
+}
+
+/* ---------------- Header ---------------- */
+
+.header {
+  margin-bottom: 20px;
+}
+
+.title {
+  margin: 0 0 4px 0;
+  font-size: 2rem;
+}
+
+.subtitle {
+  margin: 0;
+  color: #4b5563;
+  font-size: 0.95rem;
+}
+
+/* ---------------- Panels (input + preview) ---------------- */
+
+.panels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  align-items: stretch;
+}
+
+.panel {
+  flex: 1 1 340px;
+  background: #ffffffcc;
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  padding: 16px 18px 18px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.panel-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4f46e5;
+  border: 1px solid #e0e7ff;
+}
+
+.panel-tag-secondary {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #bbf7d0;
+}
+
+/* ---------------- Form & textarea (fallback) ---------------- */
+
+.checker-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  font-family: var(--code-font);
+  font-size: var(--code-size);
+  line-height: var(--code-line-height);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  outline: none;
+  background: #f9fafb;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.textarea:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 1px #4f46e5;
+  background: #ffffff;
+}
+
+.form-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------------- Buttons ---------------- */
+
+.btn-primary {
+  border: none;
+  border-radius: 999px;
+  padding: 7px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: white;
+  box-shadow: 0 10px 25px rgba(79, 70, 229, 0.35);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.1s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(79, 70, 229, 0.45);
+  filter: brightness(1.02);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.35);
+}
+
+.btn-secondary {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: #f9fafb;
+  color: #374151;
+  margin-right: 8px;
+  transition: background 0.1s ease, border-color 0.1s ease, transform 0.08s ease;
+}
+
+.btn-secondary:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  transform: translateY(-0.5px);
+}
+
+.btn-secondary:active {
+  transform: translateY(0);
+}
+
+/* ---------------- Highlighted LaTeX (right panel) ---------------- */
+
+.code-view {
+  margin-top: 0;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: #111827;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-family: var(--code-font);
+  font-size: var(--code-size);
+}
+
+.code-line {
+  display: flex;
+  line-height: var(--code-line-height);
+}
+
+.code-line-number {
+  width: 2.5em;
+  margin-right: 0.75em;
+  color: #9ca3af;
+  font-family: var(--code-font);
+  font-size: var(--code-size);
+  line-height: var(--code-line-height);
+}
+
+.code-line-content {
+  flex: 1;
+  white-space: pre-wrap;
+}
+
+.placeholder {
+  margin: 6px 0 2px;
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+/* Inline issue highlighting inside LaTeX */
+
+.issue-digit {
+  background-color: rgba(239, 68, 68, 0.35);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+.issue-letter {
+  background-color: rgba(59, 130, 246, 0.35);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+.issue-punct {
+  background-color: rgba(245, 158, 11, 0.5);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+.issue-backslash {
+  background-color: rgba(16, 185, 129, 0.45);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+/* ---------------- Issues list (if you show it) ---------------- */
+
+.issues-section {
+  background: #ffffffcc;
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  padding: 14px 18px 16px;
+}
+
+.issues-section h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+
+.issues-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issue-item {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 0.9rem;
+}
+
+.issue-badge {
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.issue-badge-digit {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.issue-badge-letter {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.issue-badge-punct {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.issue-badge-backslash {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.issue-location {
+  font-variant-numeric: tabular-nums;
+  color: #4b5563;
+}
+
+.issue-char {
+  background: #111827;
+  color: #f9fafb;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.issue-context {
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-item-digit {
+  border-color: #fecaca;
+}
+
+.issue-item-letter {
+  border-color: #bfdbfe;
+}
+
+.issue-item-punct {
+  border-color: #fed7aa;
+}
+
+.issue-item-backslash {
+  border-color: #a7f3d0;
+}
+
+.no-issues {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+/* ---------------- CodeMirror (left panel) ---------------- */
+
+.CodeMirror,
+.CodeMirror pre,
+.CodeMirror span {
+  font-family: var(--code-font);
+  font-size: var(--code-size);
+  line-height: var(--code-line-height);
+}
+
+.CodeMirror {
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  height: auto;
+}
+
+.CodeMirror-scroll {
+  max-height: none;
+  overflow-y: hidden;   /* no vertical scroll bar */
+  overflow-x: auto;     /* only horizontal scroll if really needed */
+}
+
+.CodeMirror-lines {
+  padding: 6px 0;
+}
+
+/* ---------------- Responsive ---------------- */
+
+@media (max-width: 768px) {
+  .page {
+    padding: 16px;
+  }
+
+  .panel {
+    padding: 14px 14px 16px;
+  }
+
+  .textarea {
+    min-height: 220px;
+  }
+
+  .issues-section {
+    margin-top: 8px;
+  }
+}

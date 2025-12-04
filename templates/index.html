@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LaTeX Checker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- CodeMirror CSS (via CDN) -->
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/eclipse.min.css">
+
+  <!-- current CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" type="image/png"
+      href="{{ url_for('static', filename='favicon.png') }}">
+
+</head>
+
+<body>
+  <div class="page">
+    <div class="container">
+      <header class="header">
+        <h1 class="title">LaTeX Checker</h1>
+        <p class="subtitle">
+          Paste your LaTeX, hit <strong>Check</strong>, and we’ll highlight
+          digits outside math, double reverse slashes, stray single letters, and commas/colons inside math.
+        </p>
+      </header>
+
+      <main>
+        <section class="panels" id="panels">
+          <!-- Left: input form -->
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Input Text</h2>
+              <span class="panel-tag">Source</span>
+            </div>
+
+            <form method="post" action="#panels" class="checker-form">
+              <!-- <label for="latex" class="field-label">LaTeX source</label> -->
+              <textarea id="latex" name="latex"
+                        class="textarea"
+                        placeholder="Paste or type your LaTeX here...">{{ text|e }}</textarea>
+
+              <div class="form-actions">
+                <button type="button" class="btn-secondary" id="copy-btn">Copy</button>
+                <button type="submit" class="btn-primary">Check</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Right: highlighted LaTeX -->
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Highlighted issues</h2>
+              <span class="panel-tag panel-tag-secondary">Preview</span>
+            </div>
+
+            {% if highlighted %}
+              <div class="code-view">{{ highlighted|safe }}</div>
+            {% elif text %}
+              <p class="placeholder">
+                No issues found in the text 🎉
+              </p>
+            {% else %}
+              <p class="placeholder">
+                Run a check to see highlighted output here.
+              </p>
+            {% endif %}
+          </div>
+        </section>
+         <section class="issues-section">
+            <h2>Issues</h2>
+
+            {% if issues %}
+              <ul class="issues-list">
+                {% for issue in issues %}
+                  <li class="issue-item issue-item-{{ issue.kind }}">
+                    <span class="issue-badge issue-badge-{{ issue.kind }}">
+                      {{ issue.kind }}
+                    </span>
+                    <span class="issue-location">
+                      line {{ issue.line }}, col {{ issue.col }}
+                    </span>
+                    <code class="issue-char">'{{ issue.char }}'</code>
+                    <span class="issue-context">{{ issue.line_text }}</span>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% elif text %}
+              <p class="no-issues">No issues to report. Nice work ✨</p>
+            {% else %}
+              <p class="no-issues">
+                Paste some LaTeX above and click <strong>Check</strong> to see results.
+              </p>
+            {% endif %}
+          </section>
+        </main>
+      </main>
+    </div>
+  </div>
+    <!-- CodeMirror JS (via CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/stex/stex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/matchbrackets.min.js"></script>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const textarea = document.getElementById('latex');
+        const copyBtn = document.getElementById('copy-btn');
+
+        // Turn the textarea into a CodeMirror editor
+        const cm = CodeMirror.fromTextArea(textarea, {
+          mode: 'stex',
+          lineNumbers: true,
+          lineWrapping: true,
+          matchBrackets: true,
+          theme: 'eclipse',
+          viewportMargin: Infinity   // render all lines, no virtual viewport
+        });
+
+        cm.setSize('100%', 'auto');
+
+
+        // Copy button: copy from CodeMirror content
+        if (copyBtn) {
+          copyBtn.addEventListener('click', function () {
+            const text = cm.getValue();
+            if (!text) return;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).catch(console.error);
+            } else {
+              // Fallback: copy via hidden textarea
+              const temp = document.createElement('textarea');
+              temp.value = text;
+              document.body.appendChild(temp);
+              temp.select();
+              try {
+                document.execCommand('copy');
+              } catch (e) {
+                console.error(e);
+              }
+              document.body.removeChild(temp);
+              window.getSelection().removeAllRanges();
+            }
+          });
+        }
+
+        // Ensure textarea is up-to-date on submit (CodeMirror normally
+        // handles this, but this is safe and explicit)
+        const form = document.querySelector('.checker-form');
+        if (form) {
+          form.addEventListener('submit', function () {
+            textarea.value = cm.getValue();
+          });
+        }
+      });
+      </script>
+</body>
+</html>
