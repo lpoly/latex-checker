@@ -171,6 +171,60 @@ def find_double_backslashes(text: str):
 
     return results
 
+def find_missing_space_after_punctuation(text: str):
+    """
+    Find punctuation characters outside math that are not followed by a space
+    (or newline / end-of-text / another punctuation / closing quote/paren).
+
+    We treat this as a "spacing" issue.
+    """
+    masked = mask_math_regions(text)          # hide math so we only check text
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+
+    punctuation = ".,;:!?"                     # chars that should usually be followed by space
+    closing_chars = '")\']}>”’'               # we allow these between punctuation and space
+
+    results = []
+    n = len(masked)
+
+    for idx, ch in enumerate(masked):
+        if ch not in punctuation:
+            continue
+
+        j = idx + 1
+        if j >= n:
+            # punctuation at very end of file is fine
+            continue
+
+        # Skip over closing quotes / brackets etc. in the *original* text
+        while j < n and text[j] in closing_chars:
+            j += 1
+
+        if j >= n:
+            # end of text after closers -> fine
+            continue
+
+        next_ch = text[j]
+
+        # OK if followed by whitespace or another punctuation
+        if next_ch in " \t\n\r" or next_ch in punctuation:
+            continue
+
+        # Otherwise: no space after punctuation -> flag it
+        line_no, col_no = index_to_line_col(idx, line_starts)
+        line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+
+        results.append({
+            "kind": "spacing",
+            "index": idx,
+            "line": line_no,
+            "col": col_no,
+            "char": text[idx],    # the punctuation character
+            "line_text": line_text,
+        })
+
+    return results
 
 
 def analyze_text(text: str):
@@ -179,7 +233,7 @@ def analyze_text(text: str):
     issues.extend(find_digits_outside_math(text))
     issues.extend(find_single_letters_outside_math(text))
     issues.extend(find_commas_colons_inside_math(text))
-    issues.extend(find_double_backslashes(text))  # NEW
-
+    issues.extend(find_missing_space_after_punctuation(text))
+    # sort by index so highlighting is deterministic
     issues.sort(key=lambda x: x["index"])
     return issues

@@ -252,6 +252,13 @@ body {
   border-radius: 3px;
 }
 
+.issue-spacing {
+  background-color: rgba(147, 51, 234, 0.35);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+
 /* ---------------- Issues list (if you show it) ---------------- */
 
 .issues-section {
@@ -318,6 +325,11 @@ body {
   color: #047857;
 }
 
+.issue-badge-spacing {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
 .issue-location {
   font-variant-numeric: tabular-nums;
   color: #4b5563;
@@ -352,6 +364,10 @@ body {
 
 .issue-item-backslash {
   border-color: #a7f3d0;
+}
+
+.issue-item-spacing {
+  border-color: #e9d5ff;
 }
 
 .no-issues {
