@@ -171,91 +171,63 @@ def find_double_backslashes(text: str):
 
     return results
 
-def find_missing_space_after_punctuation(text: str):
+def find_spacing_around_punctuation(text: str):
     """
-    Find punctuation characters outside math that are not followed by a space
-    (or newline / end-of-text / another punctuation / closing quote/paren).
+    Find punctuation characters outside math with bad spacing:
+      - a space directly BEFORE the punctuation (e.g. "word ,like this")
+      - NO space AFTER the punctuation (e.g. "word,bad spacing")
 
-    We treat this as a "spacing" issue.
+    We ignore punctuation inside math.
     """
-    masked = mask_math_regions(text)          # hide math so we only check text
+    math_mask = get_math_mask(text)
     line_starts = build_line_starts(text)
     lines = text.splitlines()
 
-    punctuation = ".,;:!?"                     # chars that should usually be followed by space
-    closing_chars = '")\']}>”’'               # we allow these between punctuation and space
+    punctuation = ".,;:!?"
+    closing_chars = '")\']}>”’'  # chars we can skip AFTER the punctuation
 
     results = []
-    n = len(masked)
+    n = len(text)
 
-    for idx, ch in enumerate(masked):
+    for idx, ch in enumerate(text):
         if ch not in punctuation:
             continue
 
-        j = idx + 1
-        if j >= n:
-            # punctuation at very end of file is fine
+        # Skip punctuation inside math
+        if idx < len(math_mask) and math_mask[idx]:
             continue
 
-        # Skip over closing quotes / brackets etc. in the *original* text
+        # 1) Space BEFORE punctuation?
+        has_space_before = (idx > 0 and text[idx - 1] == ' ')
+
+        # 2) Missing space AFTER punctuation?
+        j = idx + 1
+        # Skip closing quotes/brackets etc.
         while j < n and text[j] in closing_chars:
             j += 1
 
-        if j >= n:
-            # end of text after closers -> fine
-            continue
+        missing_space_after = False
+        if j < n:
+            next_ch = text[j]
+            # If the next "real" char is not whitespace, we expect a space
+            if next_ch not in " \t\n\r":
+                missing_space_after = True
+        # If j >= n, punctuation at end-of-text -> OK (no missing space)
 
-        next_ch = text[j]
-
-        # OK if followed by whitespace or another punctuation
-        if next_ch in " \t\n\r" or next_ch in punctuation:
-            continue
-
-        # Otherwise: no space after punctuation -> flag it
-        line_no, col_no = index_to_line_col(idx, line_starts)
-        line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
-
-        results.append({
-            "kind": "spacing",
-            "index": idx,
-            "line": line_no,
-            "col": col_no,
-            "char": text[idx],    # the punctuation character
-            "line_text": line_text,
-        })
+        if has_space_before or missing_space_after:
+            line_no, col_no = index_to_line_col(idx, line_starts)
+            line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+            results.append({
+                "kind": "spacing",
+                "index": idx,
+                "line": line_no,
+                "col": col_no,
+                "char": ch,
+                "line_text": line_text,
+            })
 
     return results
 
-
-def find_space_before_punctuation(text: str):
-    """
-    Find cases where there is a space directly before a punctuation mark
-    outside math mode, e.g. 'word ,' or '2 .'.
-    """
-    masked = mask_math_regions(text)          # hide math so we only check text
-    line_starts = build_line_starts(text)
-    lines = text.splitlines()
-
-    # Pattern: non-space, then one or more spaces, then punctuation
-    # outside math (math has been blanked in 'masked').
-    pattern = re.compile(r'(\S)( +)([.,;:!?])')
-
-    results = []
-    for m in pattern.finditer(masked):
-        punct_index = m.start(3)  # index of the punctuation character
-        line_no, col_no = index_to_line_col(punct_index, line_starts)
-        line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
-
-        results.append({
-            "kind": "spacing",
-            "index": punct_index,
-            "line": line_no,
-            "col": col_no,
-            "char": text[punct_index],  # the punctuation itself
-            "line_text": line_text,
-        })
-
-    return results
 
 
 def analyze_text(text: str):
@@ -265,8 +237,7 @@ def analyze_text(text: str):
     issues.extend(find_digits_outside_math(text))
     issues.extend(find_single_letters_outside_math(text))
     issues.extend(find_commas_colons_inside_math(text))
-    issues.extend(find_missing_space_after_punctuation(text))
-    issues.extend(find_space_before_punctuation(text))
+    issues.extend(find_spacing_around_punctuation(text))
 
     # De-duplicate by (kind, index) and sort
     seen = set()
