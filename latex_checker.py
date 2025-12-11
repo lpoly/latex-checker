@@ -227,13 +227,56 @@ def find_missing_space_after_punctuation(text: str):
     return results
 
 
+def find_space_before_punctuation(text: str):
+    """
+    Find cases where there is a space directly before a punctuation mark
+    outside math mode, e.g. 'word ,' or '2 .'.
+    """
+    masked = mask_math_regions(text)          # hide math so we only check text
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+
+    # Pattern: non-space, then one or more spaces, then punctuation
+    # outside math (math has been blanked in 'masked').
+    pattern = re.compile(r'(\S)( +)([.,;:!?])')
+
+    results = []
+    for m in pattern.finditer(masked):
+        punct_index = m.start(3)  # index of the punctuation character
+        line_no, col_no = index_to_line_col(punct_index, line_starts)
+        line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+
+        results.append({
+            "kind": "spacing",
+            "index": punct_index,
+            "line": line_no,
+            "col": col_no,
+            "char": text[punct_index],  # the punctuation itself
+            "line_text": line_text,
+        })
+
+    return results
+
+
 def analyze_text(text: str):
     """Return a flat list of all issues."""
     issues = []
+
     issues.extend(find_digits_outside_math(text))
     issues.extend(find_single_letters_outside_math(text))
     issues.extend(find_commas_colons_inside_math(text))
     issues.extend(find_missing_space_after_punctuation(text))
-    # sort by index so highlighting is deterministic
-    issues.sort(key=lambda x: x["index"])
-    return issues
+    issues.extend(find_space_before_punctuation(text))
+
+    # De-duplicate by (kind, index) and sort
+    seen = set()
+    unique = []
+    for issue in issues:
+        key = (issue["kind"], issue["index"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(issue)
+
+    unique.sort(key=lambda x: x["index"])
+    return unique
