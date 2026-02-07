@@ -5,7 +5,7 @@ from bisect import bisect_right
 MATH_ENVS = [
     "array",
     "align", "align*",
-    "gather", "gather*",
+    "gather", "gather*", "equation"
 ]
 
 ENV_PATTERN = re.compile(
@@ -243,6 +243,9 @@ def find_spacing_around_punctuation(text: str):
       - NO space AFTER the punctuation (e.g. "word,bad spacing")
 
     We ignore punctuation inside math.
+
+    NOTE: we allow punctuation immediately followed by a quote, e.g.
+      Hello,"this is an example"
     """
     math_mask = get_math_mask(text)
     line_starts = build_line_starts(text)
@@ -250,6 +253,7 @@ def find_spacing_around_punctuation(text: str):
 
     punctuation = ".,;:!?"
     closing_chars = '")\']}>”’'  # chars we can skip AFTER the punctuation
+    quote_chars = '"“”‘’\''      # chars we treat as OK immediately after punct
 
     results = []
     n = len(text)
@@ -266,18 +270,27 @@ def find_spacing_around_punctuation(text: str):
         has_space_before = (idx > 0 and text[idx - 1] == ' ')
 
         # 2) Missing space AFTER punctuation?
-        j = idx + 1
-        # Skip closing quotes/brackets etc.
-        while j < n and text[j] in closing_chars:
-            j += 1
-
         missing_space_after = False
-        if j < n:
-            next_ch = text[j]
-            # If the next "real" char is not whitespace, we expect a space
-            if next_ch not in " \t\n\r":
-                missing_space_after = True
-        # If j >= n, punctuation at end-of-text -> OK (no missing space)
+
+        if idx + 1 < n:
+            next_immediate = text[idx + 1]
+
+            # Case: punctuation immediately followed by a quote => allow
+            if next_immediate in quote_chars:
+                missing_space_after = False
+            else:
+                # Skip over closing brackets/quotes etc. (for things like ".) ")
+                j = idx + 1
+                while j < n and text[j] in closing_chars:
+                    j += 1
+
+                if j < n:
+                    next_ch = text[j]
+                    # If the next "real" char is not whitespace, we expect a space
+                    if next_ch not in " \t\n\r":
+                        missing_space_after = True
+                # If j >= n: punctuation at end-of-text -> OK
+        # else: punctuation at very end of text -> OK
 
         if has_space_before or missing_space_after:
             line_no, col_no = index_to_line_col(idx, line_starts)
