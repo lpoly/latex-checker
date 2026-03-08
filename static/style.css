@@ -138,6 +138,49 @@ body {
   margin-top: 6px;
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------------- Fix controls cluster ---------------- */
+
+.fixes {
+  margin-top: 10px;
+}
+
+.fixes-divider {
+  height: 1px;
+  margin: 10px 0 12px;
+  background: linear-gradient(90deg, transparent, #e5e7eb 20%, #e5e7eb 80%, transparent);
+  opacity: 0.9;
+}
+
+.fixes-grid{
+  display: grid;
+  width: 100%;                  /* key: makes justify-content meaningful */
+  grid-template-columns: repeat(3, max-content);
+  grid-template-areas:
+    "all space punct"
+    ".   num   slash";
+  gap: 10px;
+  justify-content: end;         /* flush the whole 3-col grid to the right */
+}
+
+.btn-fix-space { grid-area: space; }
+.btn-fix-punct { grid-area: punct; }
+.btn-fix-all   { grid-area: all; }
+.btn-fix-num   { grid-area: num; }
+.btn-fix-slash { grid-area: slash; }
+
+@media (max-width: 520px) {
+  .fixes-grid {
+    grid-template-columns: repeat(2, max-content);
+    grid-template-areas:
+      "all all"
+      "space punct"
+      "num slash";
+    justify-content: end;
+  }
 }
 
 /* ---------------- Buttons ---------------- */
@@ -187,6 +230,63 @@ body {
 
 .btn-secondary:active {
   transform: translateY(0);
+}
+
+.btn-fix {
+  border: 1px solid #c7d2fe;              /* indigo-200 */
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(180deg, #ffffff, #eef2ff); /* subtle indigo tint */
+  color: #3730a3;                          /* indigo-800 */
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+  transition: transform 0.08s ease,
+              box-shadow 0.08s ease,
+              background 0.12s ease,
+              border-color 0.12s ease,
+              filter 0.12s ease;
+}
+
+.btn-fix:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #eef2ff, #e0e7ff);
+  border-color: #a5b4fc;                   /* indigo-300 */
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);
+}
+
+.btn-fix:active {
+  transform: translateY(0);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.btn-fix:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+/* Fix all: slightly stronger, but still secondary to the main "Check" CTA */
+.btn-fix-all {
+  border-color: #818cf8;                   /* indigo-400 */
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  color: #312e81;                          /* indigo-900-ish */
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.12);
+}
+
+.btn-fix-all:hover {
+  border-color: #6366f1;                   /* indigo-500 */
+  box-shadow: 0 14px 28px rgba(79, 70, 229, 0.16);
+}
+
+.notice {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #111827;
+  font-size: 0.9rem;
 }
 
 /* ---------------- Highlighted LaTeX (right panel) ---------------- */
@@ -260,8 +360,7 @@ body {
   border-radius: 3px;
 }
 
-
-/* ---------------- Issues list (if you show it) ---------------- */
+/* ---------------- Issues list ---------------- */
 
 .issues-section {
   background: #ffffffcc;
@@ -307,30 +406,11 @@ body {
   font-weight: 600;
 }
 
-.issue-badge-digit {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.issue-badge-letter {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
-.issue-badge-punct {
-  background: #ffedd5;
-  color: #c2410c;
-}
-
-.issue-badge-backslash {
-  background: #d1fae5;
-  color: #047857;
-}
-
-.issue-badge-spacing {
-  background: #f3e8ff;
-  color: #6b21a8;
-}
+.issue-badge-digit { background: #fee2e2; color: #b91c1c; }
+.issue-badge-letter { background: #dbeafe; color: #1d4ed8; }
+.issue-badge-punct { background: #ffedd5; color: #c2410c; }
+.issue-badge-backslash { background: #d1fae5; color: #047857; }
+.issue-badge-spacing { background: #f3e8ff; color: #6b21a8; }
 
 .issue-location {
   font-variant-numeric: tabular-nums;
@@ -352,25 +432,11 @@ body {
   white-space: nowrap;
 }
 
-.issue-item-digit {
-  border-color: #fecaca;
-}
-
-.issue-item-letter {
-  border-color: #bfdbfe;
-}
-
-.issue-item-punct {
-  border-color: #fed7aa;
-}
-
-.issue-item-backslash {
-  border-color: #a7f3d0;
-}
-
-.issue-item-spacing {
-  border-color: #e9d5ff;
-}
+.issue-item-digit { border-color: #fecaca; }
+.issue-item-letter { border-color: #bfdbfe; }
+.issue-item-punct { border-color: #fed7aa; }
+.issue-item-backslash { border-color: #a7f3d0; }
+.issue-item-spacing { border-color: #e9d5ff; }
 
 .no-issues {
   margin: 6px 0 0;
@@ -378,7 +444,7 @@ body {
   color: #4b5563;
 }
 
-/* ---------------- CodeMirror (left panel) ---------------- */
+/* ---------------- CodeMirror ---------------- */
 
 .CodeMirror,
 .CodeMirror pre,
@@ -408,19 +474,8 @@ body {
 /* ---------------- Responsive ---------------- */
 
 @media (max-width: 768px) {
-  .page {
-    padding: 16px;
-  }
-
-  .panel {
-    padding: 14px 14px 16px;
-  }
-
-  .textarea {
-    min-height: 220px;
-  }
-
-  .issues-section {
-    margin-top: 8px;
-  }
+  .page { padding: 16px; }
+  .panel { padding: 14px 14px 16px; }
+  .textarea { min-height: 220px; }
+  .issues-section { margin-top: 8px; }
 }

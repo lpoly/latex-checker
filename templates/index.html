@@ -39,14 +39,30 @@
             </div>
 
             <form method="post" action="#panels" class="checker-form">
-              <!-- <label for="latex" class="field-label">LaTeX source</label> -->
               <textarea id="latex" name="latex"
                         class="textarea"
                         placeholder="Paste or type your LaTeX here...">{{ text|e }}</textarea>
 
+              {% if fix_message %}
+                <p class="notice">{{ fix_message }}</p>
+              {% endif %}
+
               <div class="form-actions">
                 <button type="button" class="btn-secondary" id="copy-btn">Copy</button>
-                <button type="submit" class="btn-primary">Check</button>
+                <button type="submit" class="btn-primary" name="action" value="check">Check</button>
+              </div>
+
+              <div class="fixes">
+                <div class="fixes-divider" aria-hidden="true"></div>
+
+                <div class="fixes-grid">
+                  <button type="submit" class="btn-fix btn-fix-space" name="action" value="fix_delims">Fix space</button>
+                  <button type="submit" class="btn-fix btn-fix-punct" name="action" value="fix_punct">Fix punct</button>
+                  <button type="submit" class="btn-fix btn-fix-all" name="action" value="fix_all">Fix all</button>
+
+                  <button type="submit" class="btn-fix btn-fix-num" name="action" value="fix_numbers">Fix num</button>
+                  <button type="submit" class="btn-fix btn-fix-slash" name="action" value="fix_backslash">Fix \\</button>
+                </div>
               </div>
             </form>
           </div>
@@ -71,93 +87,91 @@
             {% endif %}
           </div>
         </section>
-         <section class="issues-section">
-            <h2>Issues</h2>
 
-            {% if issues %}
-              <ul class="issues-list">
-                {% for issue in issues %}
-                  <li class="issue-item issue-item-{{ issue.kind }}">
-                    <span class="issue-badge issue-badge-{{ issue.kind }}">
-                      {{ issue.kind }}
-                    </span>
-                    <span class="issue-location">
-                      line {{ issue.line }}, col {{ issue.col }}
-                    </span>
-                    <code class="issue-char">'{{ issue.char }}'</code>
-                    <span class="issue-context">{{ issue.line_text }}</span>
-                  </li>
-                {% endfor %}
-              </ul>
-            {% elif text %}
-              <p class="no-issues">No issues to report. Nice work ✨</p>
-            {% else %}
-              <p class="no-issues">
-                Paste some LaTeX above and click <strong>Check</strong> to see results.
-              </p>
-            {% endif %}
-          </section>
-        </main>
+        <section class="issues-section">
+          <h2>Issues</h2>
+
+          {% if issues %}
+            <ul class="issues-list">
+              {% for issue in issues %}
+                <li class="issue-item issue-item-{{ issue.kind }}">
+                  <span class="issue-badge issue-badge-{{ issue.kind }}">
+                    {{ issue.kind }}
+                  </span>
+                  <span class="issue-location">
+                    line {{ issue.line }}, col {{ issue.col }}
+                  </span>
+                  <code class="issue-char">'{{ issue.char }}'</code>
+                  <span class="issue-context">{{ issue.line_text }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% elif text %}
+            <p class="no-issues">No issues to report. Nice work ✨</p>
+          {% else %}
+            <p class="no-issues">
+              Paste some LaTeX above and click <strong>Check</strong> to see results.
+            </p>
+          {% endif %}
+        </section>
       </main>
     </div>
   </div>
-    <!-- CodeMirror JS (via CDN) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/stex/stex.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/matchbrackets.min.js"></script>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function () {
-        const textarea = document.getElementById('latex');
-        const copyBtn = document.getElementById('copy-btn');
+  <!-- CodeMirror JS (via CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/stex/stex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/matchbrackets.min.js"></script>
 
-        // Turn the textarea into a CodeMirror editor
-        const cm = CodeMirror.fromTextArea(textarea, {
-          mode: 'stex',
-          lineNumbers: true,
-          lineWrapping: true,
-          matchBrackets: true,
-          theme: 'eclipse',
-          viewportMargin: Infinity   // render all lines, no virtual viewport
-        });
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const textarea = document.getElementById('latex');
+      const copyBtn = document.getElementById('copy-btn');
 
-        cm.setSize('100%', 'auto');
-
-
-        // Copy button: copy from CodeMirror content
-        if (copyBtn) {
-          copyBtn.addEventListener('click', function () {
-            const text = cm.getValue();
-            if (!text) return;
-
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(text).catch(console.error);
-            } else {
-              // Fallback: copy via hidden textarea
-              const temp = document.createElement('textarea');
-              temp.value = text;
-              document.body.appendChild(temp);
-              temp.select();
-              try {
-                document.execCommand('copy');
-              } catch (e) {
-                console.error(e);
-              }
-              document.body.removeChild(temp);
-              window.getSelection().removeAllRanges();
-            }
-          });
-        }
-
-        // Ensure textarea is up-to-date on submit (CodeMirror normally
-        // handles this, but this is safe and explicit)
-        const form = document.querySelector('.checker-form');
-        if (form) {
-          form.addEventListener('submit', function () {
-            textarea.value = cm.getValue();
-          });
-        }
+      // Turn the textarea into a CodeMirror editor
+      const cm = CodeMirror.fromTextArea(textarea, {
+        mode: 'stex',
+        lineNumbers: true,
+        lineWrapping: true,
+        matchBrackets: true,
+        theme: 'eclipse',
+        viewportMargin: Infinity
       });
-      </script>
+
+      cm.setSize('100%', 'auto');
+
+      // Copy button: copy from CodeMirror content
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function () {
+          const text = cm.getValue();
+          if (!text) return;
+
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(console.error);
+          } else {
+            const temp = document.createElement('textarea');
+            temp.value = text;
+            document.body.appendChild(temp);
+            temp.select();
+            try {
+              document.execCommand('copy');
+            } catch (e) {
+              console.error(e);
+            }
+            document.body.removeChild(temp);
+            window.getSelection().removeAllRanges();
+          }
+        });
+      }
+
+      // Ensure textarea is up-to-date on submit
+      const form = document.querySelector('.checker-form');
+      if (form) {
+        form.addEventListener('submit', function () {
+          textarea.value = cm.getValue();
+        });
+      }
+    });
+  </script>
 </body>
 </html>

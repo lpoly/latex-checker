@@ -420,6 +420,319 @@ def find_spacing_inside_delimiters(text: str):
     return results
 
 
+def fix_double_backslashes(text: str):
+    r"""Auto-fix LaTeX line breaks (\\) depending on math mode.
+
+    Rules:
+      - Outside math mode: delete the \\ token.
+      - Inside math mode: replace each \\ token with \cr.
+
+    Returns:
+      (new_text, stats) where stats = {"removed": int, "replaced": int}
+    """
+    if not text:
+        return text, {"removed": 0, "replaced": 0}
+
+    math_mask = get_math_mask(text)
+    out = []
+    i = 0
+    n = len(text)
+    removed = 0
+    replaced = 0
+
+    while i < n:
+        if i < n - 1 and text[i] == "\\" and text[i + 1] == "\\":
+            in_math = (
+                (i < len(math_mask) and math_mask[i])
+                or (i + 1 < len(math_mask) and math_mask[i + 1])
+            )
+            if in_math:
+                out.append("\\cr")
+                replaced += 1
+            else:
+                removed += 1
+                # Outside math: convert \\ into a real line break.
+                # Avoid creating an extra blank line if a newline already follows.
+                next_ch = text[i + 2] if (i + 2) < n else ""
+                if next_ch not in ("\n", "\r"):
+                    out.append("\n")
+            i += 2
+            continue
+
+        out.append(text[i])
+        i += 1
+
+    return "".join(out), {"removed": removed, "replaced": replaced}
+
+
+def fix_spacing_inside_delimiters(text: str):
+    """Remove spaces/tabs just inside quotes/parentheses OUTSIDE math.
+
+    Returns:
+      (new_text, stats) where stats = {"removed": int}
+    """
+    if not text:
+        return text, {"removed": 0}
+
+    math_mask = get_math_mask(text)
+
+    left_parens = set('([')
+    right_parens = set(')]')
+
+    # Curly quotes have inherent direction; straight quote (") is ambiguous.
+    open_quotes = set('“‘')
+    close_quotes = set('”’')
+
+    out = []
+    removed = 0
+    i = 0
+    n = len(text)
+
+    def prev_non_space_in_out():
+        j = len(out) - 1
+        while j >= 0 and out[j] in (' ', '\t'):
+            j -= 1
+        return out[j] if j >= 0 else None
+
+    def next_non_space_in_text(start_idx: int):
+        j = start_idx
+        while j < n and (j < len(math_mask) and not math_mask[j]) and text[j] in (' ', '\t'):
+            j += 1
+        return text[j] if j < n and (j >= len(math_mask) or not math_mask[j]) else None
+
+    while i < n:
+        if i < len(math_mask) and math_mask[i]:
+            out.append(text[i])
+            i += 1
+            continue
+
+        ch = text[i]
+
+        # Parentheses/brackets
+        if ch in right_parens:
+            while out and out[-1] in (' ', '\t'):
+                out.pop()
+                removed += 1
+            out.append(ch)
+            i += 1
+            continue
+
+        if ch in left_parens:
+            out.append(ch)
+            i += 1
+            while i < n and (i < len(math_mask) and not math_mask[i]) and text[i] in (' ', '\t'):
+                removed += 1
+                i += 1
+            continue
+
+        # Quotes
+        if ch in open_quotes:
+            out.append(ch)
+            i += 1
+            while i < n and (i < len(math_mask) and not math_mask[i]) and text[i] in (' ', '\t'):
+                removed += 1
+                i += 1
+            continue
+
+        if ch in close_quotes:
+            while out and out[-1] in (' ', '\t'):
+                out.pop()
+                removed += 1
+            out.append(ch)
+            i += 1
+            continue
+
+        if ch == '"':
+            prev_ch = prev_non_space_in_out()
+            next_ch = next_non_space_in_text(i + 1)
+
+            # Heuristic:
+            #   - if next token looks like end/punct/None => treat as closing
+            #   - otherwise default to opening
+            # This avoids deleting the space *before* an opening quote.
+            closing_next = (next_ch is None) or (next_ch in '.,;:!?)]')
+            opening_prev = (prev_ch is None) or (prev_ch in '([\n\r\t ') or (prev_ch in ',;:!?')
+
+            is_closing = closing_next and not opening_prev
+
+            if is_closing:
+                while out and out[-1] in (' ', '\t'):
+                    out.pop()
+                    removed += 1
+                out.append(ch)
+                i += 1
+                continue
+            else:
+                out.append(ch)
+                i += 1
+                while i < n and (i < len(math_mask) and not math_mask[i]) and text[i] in (' ', '\t'):
+                    removed += 1
+                    i += 1
+                continue
+
+        out.append(ch)
+        i += 1
+
+    return "".join(out), {"removed": removed}
+
+
+def fix_spacing_before_punctuation(text: str):
+    """Remove spaces/tabs immediately before punctuation OUTSIDE math.
+
+    Punctuation: . , ; : ! ?
+
+    Returns:
+      (new_text, stats) where stats = {"removed": int}
+    """
+    if not text:
+        return text, {"removed": 0}
+
+    math_mask = get_math_mask(text)
+    punctuation = set('.,;:!?')
+
+    out = []
+    removed = 0
+    i = 0
+    n = len(text)
+
+    while i < n:
+        if i < len(math_mask) and math_mask[i]:
+            out.append(text[i])
+            i += 1
+            continue
+
+        ch = text[i]
+        if ch in punctuation:
+            while out and out[-1] in (' ', '\t'):
+                out.pop()
+                removed += 1
+            out.append(ch)
+            i += 1
+            continue
+
+        out.append(ch)
+        i += 1
+
+    return "".join(out), {"removed": removed}
+
+
+def fix_numbers_into_math(text: str):
+    """Wrap numbers outside math mode in $...$.
+
+    Conservative heuristic:
+      - skips digits inside {...} or [...] (common for command args)
+      - won't wrap digits embedded in alphanumerics
+      - supports grouped/decimal: 3.14, 1,000, 1,000,000
+      - absorbs unary +/- when it is immediately before the number:
+          "-1" -> "$-1$", "+2" -> "$+2$"
+        (but leaves binary minus like "a-1" as "a-$1$")
+
+    Returns:
+      (new_text, stats) where stats = {"wrapped": int}
+    """
+    if not text:
+        return text, {"wrapped": 0}
+
+    math_mask = get_math_mask(text)
+    out = []
+    wrapped = 0
+    brace_depth = 0
+    bracket_depth = 0
+
+    n = len(text)
+    i = 0
+
+    def is_escaped(idx: int) -> bool:
+        return idx > 0 and text[idx - 1] == '\\'
+
+    def is_outside_math(idx: int) -> bool:
+        return not (0 <= idx < len(math_mask) and math_mask[idx])
+
+    while i < n:
+        if i < len(math_mask) and math_mask[i]:
+            out.append(text[i])
+            i += 1
+            continue
+
+        ch = text[i]
+
+        if ch == '{' and not is_escaped(i):
+            brace_depth += 1
+            out.append(ch)
+            i += 1
+            continue
+        if ch == '}' and not is_escaped(i):
+            brace_depth = max(0, brace_depth - 1)
+            out.append(ch)
+            i += 1
+            continue
+        if ch == '[' and not is_escaped(i):
+            bracket_depth += 1
+            out.append(ch)
+            i += 1
+            continue
+        if ch == ']' and not is_escaped(i):
+            bracket_depth = max(0, bracket_depth - 1)
+            out.append(ch)
+            i += 1
+            continue
+
+        if brace_depth == 0 and bracket_depth == 0 and ch.isdigit():
+            # Potentially absorb a unary sign immediately before the digit
+            start = i
+            sign_absorbed = False
+
+            if i > 0 and is_outside_math(i - 1) and text[i - 1] in "+-" and not is_escaped(i - 1):
+                prev = text[i - 2] if i - 2 >= 0 else ""
+                unary_boundary = (i - 2 < 0) or prev.isspace() or (prev in "([{\"'=,;:\n\r\t")
+                if unary_boundary:
+                    start = i - 1
+                    sign_absorbed = True
+
+            # left boundary (avoid wrapping digits embedded in words/commands)
+            if start > 0 and is_outside_math(start - 1) and (text[start - 1].isalnum() or text[start - 1] == '\\'):
+                out.append(ch)
+                i += 1
+                continue
+
+            # Scan the numeric token (digits + optional grouped/decimal separators)
+            j = i
+            while j < n and is_outside_math(j) and text[j].isdigit():
+                j += 1
+            while (
+                j + 1 < n
+                and is_outside_math(j)
+                and text[j] in '.,'
+                and is_outside_math(j + 1)
+                and text[j + 1].isdigit()
+            ):
+                j += 1
+                while j < n and is_outside_math(j) and text[j].isdigit():
+                    j += 1
+
+            token = text[start:j]
+
+            # right boundary (avoid wrapping if followed by alphanumeric)
+            if j < n and is_outside_math(j) and text[j].isalnum():
+                out.append(ch)
+                i += 1
+                continue
+
+            # If we absorbed a sign, remove the already-emitted sign from output before wrapping
+            if sign_absorbed and out and out[-1] == text[start]:
+                out.pop()
+
+            out.append(f"${token}$")
+            wrapped += 1
+            i = j
+            continue
+
+        out.append(ch)
+        i += 1
+
+    return "".join(out), {"wrapped": wrapped}
+
+
 def analyze_text(text: str):
     """Return a flat list of all issues."""
     issues = []

@@ -1,8 +1,14 @@
 # app.py
 from flask import Flask, render_template, request
-from html import escape as html_escape
 from collections import defaultdict
-from latex_checker import analyze_text
+
+from latex_checker import (
+    analyze_text,
+    fix_double_backslashes,
+    fix_numbers_into_math,
+    fix_spacing_before_punctuation,
+    fix_spacing_inside_delimiters,
+)
 
 app = Flask(__name__)
 
@@ -22,16 +28,7 @@ def escape_char(ch: str) -> str:
 
 
 def highlight_text(text: str, issues):
-    """
-    Return HTML for the highlighted LaTeX with line numbers.
-
-    Each line is rendered as:
-      <div class="code-line">
-        <span class="code-line-number">N</span>
-        <span class="code-line-content">...highlighted chars...</span>
-      </div>
-    """
-    # Map each character index -> list of "kinds" (digit, letter, punct, backslash, etc.)
+    """Return HTML for the highlighted LaTeX with line numbers."""
     index_to_kinds = defaultdict(list)
     for issue in issues:
         length = issue.get("length", 1)
@@ -41,7 +38,7 @@ def highlight_text(text: str, issues):
 
     lines = text.split("\n")
     html_lines = []
-    idx = 0  # absolute index in original text
+    idx = 0
 
     for line_no, line in enumerate(lines, start=1):
         char_pieces = []
@@ -61,23 +58,19 @@ def highlight_text(text: str, issues):
 
             idx += 1
 
-        # keep empty lines visible
         content_html = "".join(char_pieces) or "&nbsp;"
 
         html_lines.append(
             f'<div class="code-line">'
             f'<span class="code-line-number">{line_no}</span>'
             f'<span class="code-line-content">{content_html}</span>'
-            f'</div>'
+            f"</div>"
         )
 
-        # skip the newline character itself
         if idx < len(text) and text[idx] == "\n":
             idx += 1
 
     return "".join(html_lines)
-
-
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -85,9 +78,50 @@ def index():
     text = ""
     issues = []
     highlighted = ""
+    fix_message = ""
 
     if request.method == "POST":
         text = request.form.get("latex", "")
+        action = request.form.get("action", "check")
+
+        if action == "fix_all":
+            # Apply fixes in an order that minimizes interference.
+            # 1) Remove/convert \\ tokens
+            # 2) Remove spacing just inside quotes/parentheses
+            # 3) Remove spaces before punctuation
+            # 4) Wrap numeric tokens in $...$
+            text, bs = fix_double_backslashes(text)
+            text, ds = fix_spacing_inside_delimiters(text)
+            text, ps = fix_spacing_before_punctuation(text)
+            text, ns = fix_numbers_into_math(text)
+
+            changed = (bs["removed"] + bs["replaced"] + ds["removed"] + ps["removed"] + ns["wrapped"]) > 0
+            if changed:
+                fix_message = (
+                    "Fix all applied: "
+                    f"\\\\ removed {bs['removed']}; converted to \\cr {bs['replaced']}; "
+                    f"delims {ds['removed']}; punct {ps['removed']}; numbers {ns['wrapped']}."
+                )
+            else:
+                fix_message = "Fix all: no changes needed."
+
+        elif action == "fix_backslash":
+            text, stats = fix_double_backslashes(text)
+            fix_message = (
+                f"Fixed \\\\: removed {stats['removed']} outside math; "
+                f"replaced {stats['replaced']} inside math with \\cr."
+            )
+        elif action == "fix_delims":
+            text, stats = fix_spacing_inside_delimiters(text)
+            fix_message = f"Fixed delimiter spacing: removed {stats['removed']} space(s)."
+        elif action == "fix_punct":
+            text, stats = fix_spacing_before_punctuation(text)
+            fix_message = f"Fixed punctuation spacing: removed {stats['removed']} space(s)."
+        elif action == "fix_numbers":
+            text, stats = fix_numbers_into_math(text)
+            fix_message = f"Fixed numbers: wrapped {stats['wrapped']} number(s) in $...$."
+        # else: "check" or unknown -> no modification
+
         issues = analyze_text(text)
         highlighted = highlight_text(text, issues)
 
@@ -96,6 +130,7 @@ def index():
         text=text,
         issues=issues,
         highlighted=highlighted,
+        fix_message=fix_message,
     )
 
 
