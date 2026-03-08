@@ -617,15 +617,14 @@ def fix_spacing_before_punctuation(text: str):
 
 
 def fix_numbers_into_math(text: str):
-    """Wrap numbers outside math mode in $...$.
+    """Wrap number tokens outside math mode in $...$.
 
-    Conservative heuristic:
-      - skips digits inside {...} or [...] (common for command args)
-      - won't wrap digits embedded in alphanumerics
-      - supports grouped/decimal: 3.14, 1,000, 1,000,000
-      - absorbs unary +/- when it is immediately before the number:
+    Behavior:
+      - Wraps numbers even inside plain brackets/braces, e.g. [1] -> [$1$]
+      - Absorbs unary +/- when it is immediately before the number:
           "-1" -> "$-1$", "+2" -> "$+2$"
-        (but leaves binary minus like "a-1" as "a-$1$")
+      - Skips numbers inside *LaTeX command arguments* (required {...} and optional [...] args),
+        e.g. \cite{2020}, \item[1], \href{...}{2020}.
 
     Returns:
       (new_text, stats) where stats = {"wrapped": int}
@@ -636,11 +635,14 @@ def fix_numbers_into_math(text: str):
     math_mask = get_math_mask(text)
     out = []
     wrapped = 0
-    brace_depth = 0
-    bracket_depth = 0
-
     n = len(text)
     i = 0
+
+    # Track whether we're inside a command argument (so we don't break \cite{2020}, etc.)
+    brace_cmd_stack = []     # stack of bools: does this { ... } belong to a command arg?
+    bracket_cmd_stack = []   # stack of bools: does this [ ... ] belong to a command opt arg?
+    cmd_arg_level = 0        # >0 means we're inside at least one command arg
+    last_cmd_arg_close = None  # index of a '}' that closed a command arg (for multi-arg commands)
 
     def is_escaped(idx: int) -> bool:
         return idx > 0 and text[idx - 1] == '\\'
@@ -648,7 +650,76 @@ def fix_numbers_into_math(text: str):
     def is_outside_math(idx: int) -> bool:
         return not (0 <= idx < len(math_mask) and math_mask[idx])
 
+    def skip_ws_left(j: int) -> int:
+        while j >= 0 and text[j] in " \t\r\n":
+            j -= 1
+        return j
+
+    def strip_one_optional_arg_ending_at(j: int) -> int:
+        """If text[j] == ']' (not escaped), move j left to just before matching '[' (skipping nested [])."""
+        if j < 0 or text[j] != ']' or is_escaped(j):
+            return j
+        depth = 1
+        k = j - 1
+        while k >= 0:
+            if text[k] == ']' and not is_escaped(k):
+                depth += 1
+            elif text[k] == '[' and not is_escaped(k):
+                depth -= 1
+                if depth == 0:
+                    return skip_ws_left(k - 1)
+            k -= 1
+        return j  # unmatched; leave as-is
+
+    def preceded_by_control_sequence(pos: int) -> bool:
+        """Heuristic: is there a TeX control sequence immediately before pos (skipping whitespace and optional args)?"""
+        j = skip_ws_left(pos - 1)
+        if j < 0:
+            return False
+
+        # If we're after one or more optional args: \cmd[...][...]{...}
+        while j >= 0 and text[j] == ']' and not is_escaped(j):
+            new_j = strip_one_optional_arg_ending_at(j)
+            if new_j == j:
+                break
+            j = new_j
+
+        # Optional star: \section*{...}
+        if j >= 0 and text[j] == '*':
+            j = skip_ws_left(j - 1)
+
+        if j < 0:
+            return False
+
+        # Control word: \command
+        if text[j].isalpha():
+            k = j
+            while k >= 0 and text[k].isalpha():
+                k -= 1
+            return k >= 0 and text[k] == '\\' and not is_escaped(k)
+
+        # Control symbol: \, \% etc. (rare before args, but harmless to detect)
+        return j >= 1 and text[j - 1] == '\\' and not is_escaped(j - 1)
+
+    def is_cmd_required_arg_open(pos: int) -> bool:
+        # normal case: \cmd{...}
+        if preceded_by_control_sequence(pos):
+            return True
+        # multi-arg case: \cmd{...}{...}  -> treat subsequent { as command args too if only whitespace between
+        if last_cmd_arg_close is not None:
+            k = last_cmd_arg_close + 1
+            while k < pos and text[k] in " \t\r\n":
+                k += 1
+            if k == pos:  # only whitespace between
+                return True
+        return False
+
+    def is_cmd_optional_arg_open(pos: int) -> bool:
+        # optional args generally follow the control sequence directly: \cmd[...]
+        return preceded_by_control_sequence(pos)
+
     while i < n:
+        # Always pass through math-mode text unchanged
         if i < len(math_mask) and math_mask[i]:
             out.append(text[i])
             i += 1
@@ -656,32 +727,55 @@ def fix_numbers_into_math(text: str):
 
         ch = text[i]
 
+        # Track command-argument contexts for { } and [ ]
         if ch == '{' and not is_escaped(i):
-            brace_depth += 1
-            out.append(ch)
-            i += 1
-            continue
-        if ch == '}' and not is_escaped(i):
-            brace_depth = max(0, brace_depth - 1)
-            out.append(ch)
-            i += 1
-            continue
-        if ch == '[' and not is_escaped(i):
-            bracket_depth += 1
-            out.append(ch)
-            i += 1
-            continue
-        if ch == ']' and not is_escaped(i):
-            bracket_depth = max(0, bracket_depth - 1)
+            is_cmd = is_cmd_required_arg_open(i)
+            brace_cmd_stack.append(is_cmd)
+            if is_cmd:
+                cmd_arg_level += 1
             out.append(ch)
             i += 1
             continue
 
-        if brace_depth == 0 and bracket_depth == 0 and ch.isdigit():
-            # Potentially absorb a unary sign immediately before the digit
+        if ch == '}' and not is_escaped(i):
+            is_cmd = brace_cmd_stack.pop() if brace_cmd_stack else False
+            if is_cmd and cmd_arg_level > 0:
+                cmd_arg_level -= 1
+                last_cmd_arg_close = i
+            else:
+                # if we closed a non-command brace, don't keep last_cmd_arg_close "armed"
+                last_cmd_arg_close = None
+            out.append(ch)
+            i += 1
+            continue
+
+        if ch == '[' and not is_escaped(i):
+            is_cmd = is_cmd_optional_arg_open(i)
+            bracket_cmd_stack.append(is_cmd)
+            if is_cmd:
+                cmd_arg_level += 1
+            out.append(ch)
+            i += 1
+            continue
+
+        if ch == ']' and not is_escaped(i):
+            is_cmd = bracket_cmd_stack.pop() if bracket_cmd_stack else False
+            if is_cmd and cmd_arg_level > 0:
+                cmd_arg_level -= 1
+            out.append(ch)
+            i += 1
+            continue
+
+        # Any non-whitespace character resets the "multi-arg" brace chaining unless it's '{' (handled above)
+        if ch not in " \t\r\n":
+            last_cmd_arg_close = None
+
+        # Wrap digits (outside math) unless we're inside a command argument
+        if ch.isdigit() and cmd_arg_level == 0:
             start = i
             sign_absorbed = False
 
+            # Absorb unary +/-
             if i > 0 and is_outside_math(i - 1) and text[i - 1] in "+-" and not is_escaped(i - 1):
                 prev = text[i - 2] if i - 2 >= 0 else ""
                 unary_boundary = (i - 2 < 0) or prev.isspace() or (prev in "([{\"'=,;:\n\r\t")
@@ -689,16 +783,17 @@ def fix_numbers_into_math(text: str):
                     start = i - 1
                     sign_absorbed = True
 
-            # left boundary (avoid wrapping digits embedded in words/commands)
+            # Left boundary: avoid wrapping digits embedded in words/commands
             if start > 0 and is_outside_math(start - 1) and (text[start - 1].isalnum() or text[start - 1] == '\\'):
                 out.append(ch)
                 i += 1
                 continue
 
-            # Scan the numeric token (digits + optional grouped/decimal separators)
+            # Scan numeric token (digits + optional grouped/decimal separators)
             j = i
             while j < n and is_outside_math(j) and text[j].isdigit():
                 j += 1
+
             while (
                 j + 1 < n
                 and is_outside_math(j)
@@ -712,13 +807,13 @@ def fix_numbers_into_math(text: str):
 
             token = text[start:j]
 
-            # right boundary (avoid wrapping if followed by alphanumeric)
+            # Right boundary: avoid wrapping if followed by alphanumeric
             if j < n and is_outside_math(j) and text[j].isalnum():
                 out.append(ch)
                 i += 1
                 continue
 
-            # If we absorbed a sign, remove the already-emitted sign from output before wrapping
+            # If we absorbed a sign, remove the already-emitted sign char before wrapping
             if sign_absorbed and out and out[-1] == text[start]:
                 out.pop()
 
