@@ -447,7 +447,7 @@ def fix_double_backslashes(text: str):
                 or (i + 1 < len(math_mask) and math_mask[i + 1])
             )
             if in_math:
-                out.append("\\cr")
+                out.append("\\cr ")
                 replaced += 1
             else:
                 removed += 1

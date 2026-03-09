@@ -123,55 +123,63 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/stex/stex.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/matchbrackets.min.js"></script>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const textarea = document.getElementById('latex');
-      const copyBtn = document.getElementById('copy-btn');
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Restore scroll position after reload
+    const y = sessionStorage.getItem('scrollY');
+    if (y !== null) {
+      window.scrollTo(0, parseInt(y, 10));
+      sessionStorage.removeItem('scrollY');
+    }
 
-      // Turn the textarea into a CodeMirror editor
-      const cm = CodeMirror.fromTextArea(textarea, {
-        mode: 'stex',
-        lineNumbers: true,
-        lineWrapping: true,
-        matchBrackets: true,
-        theme: 'eclipse',
-        viewportMargin: Infinity
-      });
+    const textarea = document.getElementById('latex');
+    const copyBtn = document.getElementById('copy-btn');
 
-      cm.setSize('100%', 'auto');
-
-      // Copy button: copy from CodeMirror content
-      if (copyBtn) {
-        copyBtn.addEventListener('click', function () {
-          const text = cm.getValue();
-          if (!text) return;
-
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).catch(console.error);
-          } else {
-            const temp = document.createElement('textarea');
-            temp.value = text;
-            document.body.appendChild(temp);
-            temp.select();
-            try {
-              document.execCommand('copy');
-            } catch (e) {
-              console.error(e);
-            }
-            document.body.removeChild(temp);
-            window.getSelection().removeAllRanges();
-          }
-        });
-      }
-
-      // Ensure textarea is up-to-date on submit
-      const form = document.querySelector('.checker-form');
-      if (form) {
-        form.addEventListener('submit', function () {
-          textarea.value = cm.getValue();
-        });
-      }
+    // Turn the textarea into a CodeMirror editor
+    const cm = CodeMirror.fromTextArea(textarea, {
+      mode: 'stex',
+      lineNumbers: true,
+      lineWrapping: true,
+      matchBrackets: true,
+      theme: 'eclipse',
+      viewportMargin: Infinity
     });
-  </script>
+
+    cm.setSize('100%', 'auto');
+
+    // Copy button: copy from CodeMirror content
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function () {
+        const text = cm.getValue();
+        if (!text) return;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).catch(console.error);
+        } else {
+          const temp = document.createElement('textarea');
+          temp.value = text;
+          document.body.appendChild(temp);
+          temp.select();
+          try {
+            document.execCommand('copy');
+          } catch (e) {
+            console.error(e);
+          }
+          document.body.removeChild(temp);
+          window.getSelection().removeAllRanges();
+        }
+      });
+    }
+
+    // Ensure textarea is up-to-date on submit + save scroll position
+    const form = document.querySelector('.checker-form');
+    if (form) {
+      form.addEventListener('submit', function () {
+        sessionStorage.setItem('scrollY', String(window.scrollY));
+        textarea.value = cm.getValue();
+      });
+    }
+  });
+</script>
 </body>
 </html>
