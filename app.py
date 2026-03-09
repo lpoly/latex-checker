@@ -1,6 +1,9 @@
 # app.py
 from flask import Flask, render_template, request
 from collections import defaultdict
+from pathlib import Path
+import markdown
+
 
 from latex_checker import (
     analyze_text,
@@ -133,6 +136,20 @@ def index():
         fix_message=fix_message,
     )
 
+@app.get("/help")
+def help_page():
+    md_path = Path(app.root_path) / "USAGE.md"
+    if md_path.exists():
+        md_text = md_path.read_text(encoding="utf-8")
+    else:
+        md_text = "# USAGE\n\nUSAGE.md not found."
+
+    html = markdown.markdown(
+        md_text,
+        extensions=["fenced_code", "tables", "toc"]
+    )
+
+    return render_template("help.html", content=html)
 
 if __name__ == "__main__":
     app.run(debug=True)
