@@ -452,10 +452,9 @@ def fix_double_backslashes(text: str):
             else:
                 removed += 1
                 # Outside math: convert \\ into a real line break.
-                # Avoid creating an extra blank line if a newline already follows.
+                # Avoid creating an extra blank line if a newline already follows. (feature removed)
                 next_ch = text[i + 2] if (i + 2) < n else ""
-                if next_ch not in ("\n", "\r"):
-                    out.append("\n")
+                out.append("\n")
             i += 2
             continue
 
