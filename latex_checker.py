@@ -15,13 +15,18 @@ ENV_PATTERN = re.compile(
     re.DOTALL
 )
 
-MATH_PATTERNS = [
+DISPLAY_MATH_PATTERNS = [
     re.compile(r'\$\$.*?\$\$', re.DOTALL),        # $$ ... $$
     re.compile(r'\\\[.*?\\\]', re.DOTALL),        # \[ ... \]
-    re.compile(r'\\\(.*?\\\)', re.DOTALL),        # \( ... \)
     ENV_PATTERN,                                  # math environments
-    re.compile(r'\$(?!\$).*?\$', re.DOTALL),      # $ ... $ (single $)
 ]
+
+INLINE_MATH_PATTERNS = [
+    re.compile(r'\\\(.*?\\\)', re.DOTALL),                 # \( ... \)
+    re.compile(r'(?<!\$)\$(?!\$).*?(?<!\$)\$(?!\$)', re.DOTALL),  # $ ... $ (single $)
+]
+
+MATH_PATTERNS = DISPLAY_MATH_PATTERNS + INLINE_MATH_PATTERNS
 
 SINGLE_LETTER_PATTERN = re.compile(
     r'\b([B-HJ-Zb-hj-z])\b(?=[\s\.,;:!?])'
@@ -42,7 +47,7 @@ def mask_math_regions(text: str) -> str:
     return ''.join(chars)
 
 def is_punct_protected_in_math(text: str, idx: int, math_mask):
-    """
+    r"""
     For a comma/colon at position idx inside math, return True if it looks
     like it's inside braces or parentheses, e.g. \{ a, b \} or (a, b).
 
@@ -104,16 +109,18 @@ def get_math_mask(text: str):
 
     return math_mask
 
-def get_math_regions(text: str):
+def get_math_regions(text: str, patterns=None):
     """
-    Return a list of (start, end) index pairs for all math regions in the text,
-    using the same patterns as get_math_mask / mask_math_regions.
+    Return a list of (start, end) index pairs for math regions in the text.
     """
+    if patterns is None:
+        patterns = MATH_PATTERNS
+
     chars = list(text)
     work_text = text
     regions = []
 
-    for pattern in MATH_PATTERNS:
+    for pattern in patterns:
         for m in pattern.finditer(work_text):
             regions.append((m.start(), m.end()))
             # mask so later patterns don't "see" inside
@@ -309,14 +316,14 @@ def find_spacing_around_punctuation(text: str):
 
 
 def find_commas_colons_inside_math(text: str):
-    """
-    Find commas/colons that are inside math regions, EXCEPT when they appear
+    r"""
+    Find commas/colons inside inline math only, EXCEPT when they appear
     inside groupings like \{ ... \}, (...) or [...].
 
-    We treat any comma/colon that is inside at least one such grouping
-    as "protected" and do NOT flag it.
+    Display math is intentionally ignored because punctuation is commonly
+    acceptable there.
     """
-    math_regions = get_math_regions(text)
+    math_regions = get_math_regions(text, INLINE_MATH_PATTERNS)
     line_starts = build_line_starts(text)
     lines = text.splitlines()
 
@@ -380,42 +387,51 @@ def find_spacing_inside_delimiters(text: str):
     line_starts = build_line_starts(text)
     lines = text.splitlines()
 
-    left_delims = '(["“‘'
-    right_delims = ')]"”’'
+    left_delims = '([“‘'
+    right_delims = ')]”’'
 
     results = []
+    seen = set()
     n = len(text)
+    straight_quote_open = False
+
+    def add_issue(space_idx: int):
+        if not (0 <= space_idx < n):
+            return
+        if space_idx in seen:
+            return
+        if text[space_idx] != ' ':
+            return
+        if space_idx < len(math_mask) and math_mask[space_idx]:
+            return
+
+        line_no, col_no = index_to_line_col(space_idx, line_starts)
+        line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+        results.append({
+            "kind": "spacing",
+            "index": space_idx,
+            "line": line_no,
+            "col": col_no,
+            "char": "␣",
+            "line_text": line_text,
+        })
+        seen.add(space_idx)
 
     for idx, ch in enumerate(text):
-        if ch != ' ':
-            continue
-
-        # Skip spaces inside math
         if idx < len(math_mask) and math_mask[idx]:
             continue
 
-        bad = False
-
-        # Space immediately AFTER an opening delimiter, e.g. "( " or "\" "
-        if idx > 0 and text[idx - 1] in left_delims:
-            bad = True
-
-        # Space immediately BEFORE a closing delimiter, e.g. " )" or " \""
-        if idx + 1 < n and text[idx + 1] in right_delims:
-            bad = True
-
-        if bad:
-            line_no, col_no = index_to_line_col(idx, line_starts)
-            line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
-            results.append({
-                "kind": "spacing",
-                "index": idx,
-                "line": line_no,
-                "col": col_no,
-                # Use a visible symbol in the issues list
-                "char": "␣",
-                "line_text": line_text,
-            })
+        if ch in left_delims:
+            add_issue(idx + 1)
+        elif ch in right_delims:
+            add_issue(idx - 1)
+        elif ch == '"':
+            if straight_quote_open:
+                add_issue(idx - 1)
+                straight_quote_open = False
+            else:
+                add_issue(idx + 1)
+                straight_quote_open = True
 
     return results
 
@@ -486,18 +502,7 @@ def fix_spacing_inside_delimiters(text: str):
     removed = 0
     i = 0
     n = len(text)
-
-    def prev_non_space_in_out():
-        j = len(out) - 1
-        while j >= 0 and out[j] in (' ', '\t'):
-            j -= 1
-        return out[j] if j >= 0 else None
-
-    def next_non_space_in_text(start_idx: int):
-        j = start_idx
-        while j < n and (j < len(math_mask) and not math_mask[j]) and text[j] in (' ', '\t'):
-            j += 1
-        return text[j] if j < n and (j >= len(math_mask) or not math_mask[j]) else None
+    straight_quote_open = False
 
     while i < n:
         if i < len(math_mask) and math_mask[i]:
@@ -542,27 +547,17 @@ def fix_spacing_inside_delimiters(text: str):
             continue
 
         if ch == '"':
-            prev_ch = prev_non_space_in_out()
-            next_ch = next_non_space_in_text(i + 1)
-
-            # Heuristic:
-            #   - if next token looks like end/punct/None => treat as closing
-            #   - otherwise default to opening
-            # This avoids deleting the space *before* an opening quote.
-            closing_next = (next_ch is None) or (next_ch in '.,;:!?)]')
-            opening_prev = (prev_ch is None) or (prev_ch in '([\n\r\t ') or (prev_ch in ',;:!?')
-
-            is_closing = closing_next and not opening_prev
-
-            if is_closing:
+            if straight_quote_open:
                 while out and out[-1] in (' ', '\t'):
                     out.pop()
                     removed += 1
                 out.append(ch)
+                straight_quote_open = False
                 i += 1
                 continue
             else:
                 out.append(ch)
+                straight_quote_open = True
                 i += 1
                 while i < n and (i < len(math_mask) and not math_mask[i]) and text[i] in (' ', '\t'):
                     removed += 1
@@ -616,7 +611,7 @@ def fix_spacing_before_punctuation(text: str):
 
 
 def fix_numbers_into_math(text: str):
-    """Wrap number tokens outside math mode in $...$.
+    r"""Wrap number tokens outside math mode in $...$.
 
     Behavior:
       - Wraps numbers even inside plain brackets/braces, e.g. [1] -> [$1$]
@@ -825,6 +820,75 @@ def fix_numbers_into_math(text: str):
         i += 1
 
     return "".join(out), {"wrapped": wrapped}
+
+
+def fix_remove_bold_commands(text: str):
+    r"""Remove \boldsymbol and \mathbf wrappers while keeping their contents.
+
+    Examples:
+      \mathbf{A} -> A
+      \boldsymbol{x+y} -> x+y
+      \mathbf\alpha -> \alpha
+
+    Returns:
+      (new_text, stats) where stats = {"removed": int}
+    """
+    if not text:
+        return text, {"removed": 0}
+
+    commands = ("\\boldsymbol", "\\mathbf")
+    out = []
+    i = 0
+    n = len(text)
+    removed = 0
+
+    while i < n:
+        matched = None
+        for cmd in commands:
+            if text.startswith(cmd, i):
+                matched = cmd
+                break
+
+        if not matched:
+            out.append(text[i])
+            i += 1
+            continue
+
+        removed += 1
+        i += len(matched)
+
+        while i < n and text[i] in " \t\r\n":
+            i += 1
+
+        if i < n and text[i] == "{":
+            depth = 1
+            i += 1
+            start = i
+
+            while i < n and depth > 0:
+                if text[i] == "{" and (i == 0 or text[i - 1] != "\\"):
+                    depth += 1
+                elif text[i] == "}" and (i == 0 or text[i - 1] != "\\"):
+                    depth -= 1
+                    if depth == 0:
+                        out.append(text[start:i])
+                        i += 1
+                        break
+                i += 1
+            else:
+                out.append(matched)
+        else:
+            if i < n and text[i] == "\\":
+                start = i
+                i += 1
+                while i < n and text[i].isalpha():
+                    i += 1
+                out.append(text[start:i])
+            elif i < n:
+                out.append(text[i])
+                i += 1
+
+    return "".join(out), {"removed": removed}
 
 
 def analyze_text(text: str):

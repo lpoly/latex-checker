@@ -160,8 +160,8 @@ body {
   width: 100%;                  /* key: makes justify-content meaningful */
   grid-template-columns: repeat(3, max-content);
   grid-template-areas:
-    "all space punct"
-    ".   num   slash";
+    "all   space punct"
+    "bold  num   slash";
   gap: 10px;
   justify-content: end;         /* flush the whole 3-col grid to the right */
 }
@@ -169,6 +169,7 @@ body {
 .btn-fix-space { grid-area: space; }
 .btn-fix-punct { grid-area: punct; }
 .btn-fix-all   { grid-area: all; }
+.btn-fix-bold  { grid-area: bold; }
 .btn-fix-num   { grid-area: num; }
 .btn-fix-slash { grid-area: slash; }
 
@@ -177,6 +178,7 @@ body {
     grid-template-columns: repeat(2, max-content);
     grid-template-areas:
       "all all"
+      "bold bold"
       "space punct"
       "num slash";
     justify-content: end;

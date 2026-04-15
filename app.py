@@ -9,6 +9,7 @@ from latex_checker import (
     analyze_text,
     fix_double_backslashes,
     fix_numbers_into_math,
+    fix_remove_bold_commands,
     fix_spacing_before_punctuation,
     fix_spacing_inside_delimiters,
 )
@@ -89,20 +90,22 @@ def index():
 
         if action == "fix_all":
             # Apply fixes in an order that minimizes interference.
-            # 1) Remove/convert \\ tokens
-            # 2) Remove spacing just inside quotes/parentheses
-            # 3) Remove spaces before punctuation
-            # 4) Wrap numeric tokens in $...$
+            # 1) Remove \boldsymbol / \mathbf wrappers
+            # 2) Remove/convert \\ tokens
+            # 3) Remove spacing just inside quotes/parentheses
+            # 4) Remove spaces before punctuation
+            # 5) Wrap numeric tokens in $...$
+            text, bd = fix_remove_bold_commands(text)
             text, bs = fix_double_backslashes(text)
             text, ds = fix_spacing_inside_delimiters(text)
             text, ps = fix_spacing_before_punctuation(text)
             text, ns = fix_numbers_into_math(text)
 
-            changed = (bs["removed"] + bs["replaced"] + ds["removed"] + ps["removed"] + ns["wrapped"]) > 0
+            changed = (bd["removed"] + bs["removed"] + bs["replaced"] + ds["removed"] + ps["removed"] + ns["wrapped"]) > 0
             if changed:
                 fix_message = (
                     "Fix all applied: "
-                    f"\\\\ removed {bs['removed']}; converted to \\cr {bs['replaced']}; "
+                    f"bold {bd['removed']}; \\\\ removed {bs['removed']}; converted to \\cr {bs['replaced']}; "
                     f"delims {ds['removed']}; punct {ps['removed']}; numbers {ns['wrapped']}."
                 )
             else:
@@ -123,6 +126,9 @@ def index():
         elif action == "fix_numbers":
             text, stats = fix_numbers_into_math(text)
             fix_message = f"Fixed numbers: wrapped {stats['wrapped']} number(s) in $...$."
+        elif action == "fix_bold":
+            text, stats = fix_remove_bold_commands(text)
+            fix_message = f"Fixed bold commands: removed {stats['removed']} wrapper(s)."
         # else: "check" or unknown -> no modification
 
         issues = analyze_text(text)
