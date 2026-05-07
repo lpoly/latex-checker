@@ -7,11 +7,15 @@ import markdown
 
 from latex_checker import (
     analyze_text,
+    analyze_problem_statement,
     fix_double_backslashes,
     fix_numbers_into_math,
     fix_remove_bold_commands,
     fix_spacing_before_punctuation,
     fix_spacing_inside_delimiters,
+    fix_bmod_to_pmod,
+    fix_naked_math_envs,
+    fix_table_to_array,
 )
 
 app = Flask(__name__)
@@ -79,66 +83,108 @@ def highlight_text(text: str, issues):
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    text = ""
-    issues = []
-    highlighted = ""
+    problem_text = ""
+    solution_text = ""
+    problem_issues = []
+    solution_issues = []
+    problem_highlighted = ""
+    solution_highlighted = ""
     fix_message = ""
 
     if request.method == "POST":
-        text = request.form.get("latex", "")
+        problem_text = request.form.get("problem_text", "")
+        solution_text = request.form.get("solution_text", "")
         action = request.form.get("action", "check")
 
         if action == "fix_all":
-            # Apply fixes in an order that minimizes interference.
-            # 1) Remove \boldsymbol / \mathbf wrappers
-            # 2) Remove/convert \\ tokens
-            # 3) Remove spacing just inside quotes/parentheses
-            # 4) Remove spaces before punctuation
-            # 5) Wrap numeric tokens in $...$
-            text, bd = fix_remove_bold_commands(text)
-            text, bs = fix_double_backslashes(text)
-            text, ds = fix_spacing_inside_delimiters(text)
-            text, ps = fix_spacing_before_punctuation(text)
-            text, ns = fix_numbers_into_math(text)
-
-            changed = (bd["removed"] + bs["removed"] + bs["replaced"] + ds["removed"] + ps["removed"] + ns["wrapped"]) > 0
+            problem_text,  pbd = fix_remove_bold_commands(problem_text)
+            problem_text,  pbs = fix_double_backslashes(problem_text)
+            problem_text,  pds = fix_spacing_inside_delimiters(problem_text)
+            problem_text,  pps = fix_spacing_before_punctuation(problem_text)
+            problem_text,  pbm = fix_bmod_to_pmod(problem_text)
+            problem_text,  pen = fix_naked_math_envs(problem_text)
+            problem_text,  ptb = fix_table_to_array(problem_text)
+            problem_text,  pns = fix_numbers_into_math(problem_text)
+            solution_text, sbd = fix_remove_bold_commands(solution_text)
+            solution_text, sbs = fix_double_backslashes(solution_text)
+            solution_text, sds = fix_spacing_inside_delimiters(solution_text)
+            solution_text, sps = fix_spacing_before_punctuation(solution_text)
+            solution_text, sbm = fix_bmod_to_pmod(solution_text)
+            solution_text, sen = fix_naked_math_envs(solution_text)
+            solution_text, stb = fix_table_to_array(solution_text)
+            solution_text, sns = fix_numbers_into_math(solution_text)
+            total_bold    = pbd["removed"]   + sbd["removed"]
+            total_bs_rem  = pbs["removed"]   + sbs["removed"]
+            total_bs_rep  = pbs["replaced"]  + sbs["replaced"]
+            total_delims  = pds["removed"]   + sds["removed"]
+            total_punct   = pps["removed"]   + sps["removed"]
+            total_nums    = pns["wrapped"]   + sns["wrapped"]
+            total_bmod    = pbm["replaced"]  + sbm["replaced"]
+            total_env     = pen["wrapped"]   + sen["wrapped"]
+            total_table   = ptb["replaced"]  + stb["replaced"]
+            changed = (total_bold + total_bs_rem + total_bs_rep + total_delims + total_punct + total_nums + total_bmod + total_env + total_table) > 0
             if changed:
                 fix_message = (
-                    "Fix all applied: "
-                    f"bold {bd['removed']}; \\\\ removed {bs['removed']}; converted to \\cr {bs['replaced']}; "
-                    f"delims {ds['removed']}; punct {ps['removed']}; numbers {ns['wrapped']}."
+                    f"Fix all: bold {total_bold}; \\\\ removed {total_bs_rem}; "
+                    f"converted to \\cr {total_bs_rep}; delims {total_delims}; "
+                    f"punct {total_punct}; numbers {total_nums}; bmod {total_bmod}; "
+                    f"env {total_env}; table {total_table}."
                 )
             else:
                 fix_message = "Fix all: no changes needed."
 
         elif action == "fix_backslash":
-            text, stats = fix_double_backslashes(text)
+            problem_text,  ps = fix_double_backslashes(problem_text)
+            solution_text, ss = fix_double_backslashes(solution_text)
             fix_message = (
-                f"Fixed \\\\: removed {stats['removed']} outside math; "
-                f"replaced {stats['replaced']} inside math with \\cr."
+                f"Fixed \\\\: removed {ps['removed'] + ss['removed']}; "
+                f"replaced with \\cr {ps['replaced'] + ss['replaced']}."
             )
         elif action == "fix_delims":
-            text, stats = fix_spacing_inside_delimiters(text)
-            fix_message = f"Fixed delimiter spacing: removed {stats['removed']} space(s)."
+            problem_text,  ps = fix_spacing_inside_delimiters(problem_text)
+            solution_text, ss = fix_spacing_inside_delimiters(solution_text)
+            fix_message = f"Fixed delimiter spacing: removed {ps['removed'] + ss['removed']} space(s)."
         elif action == "fix_punct":
-            text, stats = fix_spacing_before_punctuation(text)
-            fix_message = f"Fixed punctuation spacing: removed {stats['removed']} space(s)."
+            problem_text,  ps = fix_spacing_before_punctuation(problem_text)
+            solution_text, ss = fix_spacing_before_punctuation(solution_text)
+            fix_message = f"Fixed punctuation spacing: removed {ps['removed'] + ss['removed']} space(s)."
         elif action == "fix_numbers":
-            text, stats = fix_numbers_into_math(text)
-            fix_message = f"Fixed numbers: wrapped {stats['wrapped']} number(s) in $...$."
+            problem_text,  ps = fix_numbers_into_math(problem_text)
+            solution_text, ss = fix_numbers_into_math(solution_text)
+            fix_message = f"Fixed numbers: wrapped {ps['wrapped'] + ss['wrapped']} number(s) in $...$."
         elif action == "fix_bold":
-            text, stats = fix_remove_bold_commands(text)
-            fix_message = f"Fixed bold commands: removed {stats['removed']} wrapper(s)."
+            problem_text,  ps = fix_remove_bold_commands(problem_text)
+            solution_text, ss = fix_remove_bold_commands(solution_text)
+            fix_message = f"Fixed bold: removed {ps['removed'] + ss['removed']} wrapper(s)."
+        elif action == "fix_bmod":
+            problem_text,  ps = fix_bmod_to_pmod(problem_text)
+            solution_text, ss = fix_bmod_to_pmod(solution_text)
+            fix_message = f"Fixed bmod: replaced {ps['replaced'] + ss['replaced']} instance(s) with \\pmod."
+        elif action == "fix_env":
+            problem_text,  ps = fix_naked_math_envs(problem_text)
+            solution_text, ss = fix_naked_math_envs(solution_text)
+            fix_message = f"Fixed env: wrapped {ps['wrapped'] + ss['wrapped']} environment(s) with $$."
+        elif action == "fix_table":
+            problem_text,  ps = fix_table_to_array(problem_text)
+            solution_text, ss = fix_table_to_array(solution_text)
+            fix_message = f"Fixed table: replaced {ps['replaced'] + ss['replaced']} table(s) with array."
         # else: "check" or unknown -> no modification
 
-        issues = analyze_text(text)
-        highlighted = highlight_text(text, issues)
+        if problem_text:
+            problem_issues = analyze_problem_statement(problem_text)
+            problem_highlighted = highlight_text(problem_text, problem_issues)
+        if solution_text:
+            solution_issues = analyze_text(solution_text)
+            solution_highlighted = highlight_text(solution_text, solution_issues)
 
     return render_template(
         "index.html",
-        text=text,
-        issues=issues,
-        highlighted=highlighted,
+        problem_text=problem_text,
+        problem_issues=problem_issues,
+        problem_highlighted=problem_highlighted,
+        solution_text=solution_text,
+        solution_issues=solution_issues,
+        solution_highlighted=solution_highlighted,
         fix_message=fix_message,
     )
 

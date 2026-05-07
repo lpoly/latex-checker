@@ -871,7 +871,10 @@ def fix_remove_bold_commands(text: str):
                 elif text[i] == "}" and (i == 0 or text[i - 1] != "\\"):
                     depth -= 1
                     if depth == 0:
-                        out.append(text[start:i])
+                        content = text[start:i]
+                        # Remove spaces between digits (e.g. "1 2 3" -> "123")
+                        content = re.sub(r'(?<=\d) +(?=\d)', '', content)
+                        out.append(content)
                         i += 1
                         break
                 i += 1
@@ -891,6 +894,273 @@ def fix_remove_bold_commands(text: str):
     return "".join(out), {"removed": removed}
 
 
+def find_slash_outside_math(text: str):
+    """Find '/' characters outside math mode (should use \\frac instead)."""
+    masked = mask_math_regions(text)
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+    results = []
+    for m in re.finditer(r'/', masked):
+        idx = m.start()
+        line_no, col_no = index_to_line_col(idx, line_starts)
+        line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+        results.append({
+            "kind": "slash",
+            "index": idx,
+            "line": line_no,
+            "col": col_no,
+            "char": "/",
+            "line_text": line_text,
+        })
+    return results
+
+
+def find_slash_in_math(text: str):
+    """Find '/' characters inside math mode (should use \\frac instead)."""
+    math_mask = get_math_mask(text)
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+    results = []
+    for idx, ch in enumerate(text):
+        if ch == '/' and idx < len(math_mask) and math_mask[idx]:
+            line_no, col_no = index_to_line_col(idx, line_starts)
+            line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+            results.append({
+                "kind": "slash",
+                "index": idx,
+                "line": line_no,
+                "col": col_no,
+                "char": "/",
+                "line_text": line_text,
+            })
+    return results
+
+
+def find_exclamation_outside_math(text: str):
+    """Find '!' characters outside math mode."""
+    masked = mask_math_regions(text)
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+    results = []
+    for m in re.finditer(r'!', masked):
+        idx = m.start()
+        line_no, col_no = index_to_line_col(idx, line_starts)
+        line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+        results.append({
+            "kind": "exclamation",
+            "index": idx,
+            "line": line_no,
+            "col": col_no,
+            "char": "!",
+            "line_text": line_text,
+        })
+    return results
+
+
+def check_starts_with_capital(text: str):
+    """Return one issue if the first letter in the text is not uppercase."""
+    stripped = text.lstrip()
+    if not stripped:
+        return []
+    first_char = stripped[0]
+    if not first_char.isalpha():
+        return []  # starts with non-letter (command, digit, etc.) — skip
+    if first_char.isupper():
+        return []
+    idx = len(text) - len(stripped)
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+    line_no, col_no = index_to_line_col(idx, line_starts)
+    line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+    return [{
+        "kind": "capital",
+        "index": idx,
+        "line": line_no,
+        "col": col_no,
+        "char": first_char,
+        "line_text": line_text,
+    }]
+
+
+def check_ends_with_punct(text: str):
+    """Return one issue if the text does not end with punctuation (.!?;:)."""
+    stripped = text.rstrip()
+    if not stripped:
+        return []
+    last_char = stripped[-1]
+    if last_char in '.!?;:':
+        return []
+    idx = len(stripped) - 1
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+    line_no, col_no = index_to_line_col(idx, line_starts)
+    line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+    return [{
+        "kind": "nopunct",
+        "index": idx,
+        "line": line_no,
+        "col": col_no,
+        "char": last_char,
+        "line_text": line_text,
+    }]
+
+
+# ── Naked math environment detection & fix ──────────────────────────────────
+
+_NAKED_ENV_NAMES = ["equation", "equation*", "align", "align*"]
+
+# Patterns for DELIMITER-only math ($$...$$  and  \[...\]) — not the envs themselves
+_DELIM_ONLY_PATTERNS = [
+    re.compile(r'\$\$.*?\$\$', re.DOTALL),
+    re.compile(r'\\\[.*?\\\]', re.DOTALL),
+]
+
+
+def _build_delimiter_mask(text: str):
+    r"""Return a bool list: True at positions inside $$ or \[...\] delimiters."""
+    mask = [False] * len(text)
+    chars = list(text)
+    work = text
+    for pat in _DELIM_ONLY_PATTERNS:
+        for m in pat.finditer(work):
+            for i in range(m.start(), m.end()):
+                mask[i] = True
+                if chars[i] != '\n':
+                    chars[i] = ' '
+        work = ''.join(chars)
+    return mask
+
+
+def find_naked_math_envs(text: str):
+    r"""Find \begin{equation/align[*]} that are NOT already inside $$ or \[...\]."""
+    delim_mask = _build_delimiter_mask(text)
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+    results = []
+    for env_name in _NAKED_ENV_NAMES:
+        pat = re.compile(
+            r'\\begin\{' + re.escape(env_name) + r'\}'
+            r'.*?'
+            r'\\end\{' + re.escape(env_name) + r'\}',
+            re.DOTALL,
+        )
+        for m in pat.finditer(text):
+            if not delim_mask[m.start()]:
+                idx = m.start()
+                line_no, col_no = index_to_line_col(idx, line_starts)
+                line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+                results.append({
+                    "kind": "naked_env",
+                    "index": idx,
+                    "line": line_no,
+                    "col": col_no,
+                    "char": f"\\begin{{{env_name}}}",
+                    "line_text": line_text,
+                    "length": len(m.group()),
+                })
+    return results
+
+
+def fix_naked_math_envs(text: str):
+    r"""Wrap bare \begin{equation/align[*]}...\end{...} with $$\n...\n$$.
+
+    Returns:
+      (new_text, stats) where stats = {"wrapped": int}
+    """
+    if not text:
+        return text, {"wrapped": 0}
+
+    delim_mask = _build_delimiter_mask(text)
+    intervals = []
+    for env_name in _NAKED_ENV_NAMES:
+        pat = re.compile(
+            r'\\begin\{' + re.escape(env_name) + r'\}'
+            r'.*?'
+            r'\\end\{' + re.escape(env_name) + r'\}',
+            re.DOTALL,
+        )
+        for m in pat.finditer(text):
+            if not delim_mask[m.start()]:
+                intervals.append((m.start(), m.end()))
+
+    # Sort and merge overlapping spans
+    intervals.sort(key=lambda x: x[0])
+    merged = []
+    for s, e in intervals:
+        if merged and s < merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+
+    # Apply replacements in reverse so indices stay valid
+    result = text
+    for s, e in reversed(merged):
+        result = result[:s] + '$$\n' + result[s:e] + '\n$$' + result[e:]
+
+    return result, {"wrapped": len(merged)}
+
+
+# ── Table → array fix ────────────────────────────────────────────────────────
+
+_TABLE_PATTERN = re.compile(
+    r'\\begin\{center\}\s*\\begin\{(?:table|tabular)\}(.*?)\\end\{(?:table|tabular)\}\s*\\end\{center\}',
+    re.DOTALL,
+)
+
+
+def fix_table_to_array(text: str):
+    r"""Replace \begin{center}\begin{table}...\end{table}\end{center} with
+    \begin{array}...\end{array}, removing all $ characters inside.
+
+    Also handles \begin{tabular} in place of \begin{table}.
+
+    Returns:
+      (new_text, stats) where stats = {"replaced": int}
+    """
+    if not text:
+        return text, {"replaced": 0}
+
+    count = [0]
+
+    def _replacer(m):
+        count[0] += 1
+        inner = m.group(1)
+        inner = inner.replace('$', '')
+        return r'\begin{array}' + inner + r'\end{array}'
+
+    result = _TABLE_PATTERN.sub(_replacer, text)
+    return result, {"replaced": count[0]}
+
+
+def analyze_problem_statement(text: str):
+    """Run all checks for the problem statement (everything in analyze_text plus problem-specific ones)."""
+    issues = []
+    # Standard checks (same as solution)
+    issues.extend(find_digits_outside_math(text))
+    issues.extend(find_single_letters_outside_math(text))
+    issues.extend(find_commas_colons_inside_math(text))
+    issues.extend(find_spacing_around_punctuation(text))
+    issues.extend(find_spacing_inside_delimiters(text))
+    issues.extend(find_double_backslashes(text))
+    issues.extend(find_naked_math_envs(text))
+    # Problem-specific checks
+    issues.extend(find_slash_outside_math(text))
+    issues.extend(find_slash_in_math(text))
+    issues.extend(find_exclamation_outside_math(text))
+    issues.extend(check_starts_with_capital(text))
+    issues.extend(check_ends_with_punct(text))
+
+    seen = set()
+    unique = []
+    for issue in issues:
+        key = (issue["kind"], issue["index"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(issue)
+    unique.sort(key=lambda x: x["index"])
+    return unique
+
+
 def analyze_text(text: str):
     """Return a flat list of all issues."""
     issues = []
@@ -901,6 +1171,7 @@ def analyze_text(text: str):
     issues.extend(find_spacing_around_punctuation(text))
     issues.extend(find_spacing_inside_delimiters(text))
     issues.extend(find_double_backslashes(text))
+    issues.extend(find_naked_math_envs(text))
 
     # De-duplicate by (kind, index) and sort
     seen = set()
@@ -914,3 +1185,34 @@ def analyze_text(text: str):
 
     unique.sort(key=lambda x: x["index"])
     return unique
+
+
+def fix_bmod_to_pmod(text: str):
+    r"""Convert (\bmod{X}) or (\bmod X) to \pmod{X}.
+
+    Handles:
+      (\bmod{69})  ->  \pmod{69}
+      (\bmod 6)    ->  \pmod{6}
+
+    Returns:
+      (new_text, stats) where stats = {"replaced": int}
+    """
+    if not text:
+        return text, {"replaced": 0}
+
+    replaced = [0]
+
+    def sub_braces(m):
+        replaced[0] += 1
+        return f"\\pmod{{{m.group(1)}}}"
+
+    def sub_space(m):
+        replaced[0] += 1
+        return f"\\pmod{{{m.group(1)}}}"
+
+    # Pattern 1: (\bmod{arg})
+    text = re.sub(r'\(\\bmod\{([^}]*)\}\)', sub_braces, text)
+    # Pattern 2: (\bmod TOKEN) where TOKEN has no braces or whitespace
+    text = re.sub(r'\(\\bmod\s+([^\s\){}]+)\)', sub_space, text)
+
+    return text, {"replaced": replaced[0]}

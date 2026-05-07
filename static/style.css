@@ -56,9 +56,77 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   align-items: stretch;
 }
+
+/* ---------------- Shared controls bar ---------------- */
+
+.controls-bar {
+  margin: 8px 0 16px;
+  background: #ffffffcc;
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  padding: 16px 20px;
+}
+
+.controls-notice {
+  margin: 0 0 12px 0;
+}
+
+/* Horizontal strip: [Check both] | [fix buttons...] */
+.controls-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.controls-check {
+  flex-shrink: 0;
+  padding: 8px 24px;
+  font-size: 0.95rem;
+}
+
+/* Thin vertical rule between Check and fix buttons */
+.controls-separator {
+  width: 1px;
+  align-self: stretch;
+  background: #e5e7eb;
+  flex-shrink: 0;
+}
+
+/* Fix buttons wrap naturally in a flex row */
+.controls-fixes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .controls-separator { display: none; }
+  .controls-row { flex-direction: column; align-items: stretch; }
+  .controls-check { width: 100%; text-align: center; }
+  .controls-fixes { justify-content: center; }
+}
+
+/* ---------------- Issues row (side by side) ---------------- */
+
+.issues-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 0;
+}
+
+.issues-row .issues-section {
+  flex: 1 1 340px;
+  min-width: 0;
+}
+
 
 .panel {
   flex: 1 1 340px;
@@ -142,47 +210,13 @@ body {
   flex-wrap: wrap;
 }
 
-/* ---------------- Fix controls cluster ---------------- */
-
-.fixes {
-  margin-top: 10px;
-}
+/* ---------------- Fix controls cluster (legacy, kept for reference) ---------------- */
 
 .fixes-divider {
   height: 1px;
   margin: 10px 0 12px;
   background: linear-gradient(90deg, transparent, #e5e7eb 20%, #e5e7eb 80%, transparent);
   opacity: 0.9;
-}
-
-.fixes-grid{
-  display: grid;
-  width: 100%;                  /* key: makes justify-content meaningful */
-  grid-template-columns: repeat(3, max-content);
-  grid-template-areas:
-    "all   space punct"
-    "bold  num   slash";
-  gap: 10px;
-  justify-content: end;         /* flush the whole 3-col grid to the right */
-}
-
-.btn-fix-space { grid-area: space; }
-.btn-fix-punct { grid-area: punct; }
-.btn-fix-all   { grid-area: all; }
-.btn-fix-bold  { grid-area: bold; }
-.btn-fix-num   { grid-area: num; }
-.btn-fix-slash { grid-area: slash; }
-
-@media (max-width: 520px) {
-  .fixes-grid {
-    grid-template-columns: repeat(2, max-content);
-    grid-template-areas:
-      "all all"
-      "bold bold"
-      "space punct"
-      "num slash";
-    justify-content: end;
-  }
 }
 
 /* ---------------- Buttons ---------------- */
@@ -362,6 +396,36 @@ body {
   border-radius: 3px;
 }
 
+.issue-slash {
+  background-color: rgba(234, 179, 8, 0.45);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+.issue-exclamation {
+  background-color: rgba(245, 158, 11, 0.45);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+.issue-capital {
+  background-color: rgba(14, 165, 233, 0.35);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+.issue-nopunct {
+  background-color: rgba(239, 68, 68, 0.35);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+.issue-naked_env {
+  background-color: rgba(236, 72, 153, 0.30);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
 /* ---------------- Issues list ---------------- */
 
 .issues-section {
@@ -408,11 +472,16 @@ body {
   font-weight: 600;
 }
 
-.issue-badge-digit { background: #fee2e2; color: #b91c1c; }
-.issue-badge-letter { background: #dbeafe; color: #1d4ed8; }
-.issue-badge-punct { background: #ffedd5; color: #c2410c; }
-.issue-badge-backslash { background: #d1fae5; color: #047857; }
-.issue-badge-spacing { background: #f3e8ff; color: #6b21a8; }
+.issue-badge-digit       { background: #fee2e2; color: #b91c1c; }
+.issue-badge-letter      { background: #dbeafe; color: #1d4ed8; }
+.issue-badge-punct       { background: #ffedd5; color: #c2410c; }
+.issue-badge-backslash   { background: #d1fae5; color: #047857; }
+.issue-badge-spacing     { background: #f3e8ff; color: #6b21a8; }
+.issue-badge-slash       { background: #fef9c3; color: #a16207; }
+.issue-badge-exclamation { background: #fef3c7; color: #b45309; }
+.issue-badge-capital     { background: #e0f2fe; color: #0369a1; }
+.issue-badge-nopunct     { background: #fee2e2; color: #991b1b; }
+.issue-badge-naked_env   { background: #fce7f3; color: #9d174d; }
 
 .issue-location {
   font-variant-numeric: tabular-nums;
@@ -434,11 +503,16 @@ body {
   white-space: nowrap;
 }
 
-.issue-item-digit { border-color: #fecaca; }
-.issue-item-letter { border-color: #bfdbfe; }
-.issue-item-punct { border-color: #fed7aa; }
-.issue-item-backslash { border-color: #a7f3d0; }
-.issue-item-spacing { border-color: #e9d5ff; }
+.issue-item-digit       { border-color: #fecaca; }
+.issue-item-letter      { border-color: #bfdbfe; }
+.issue-item-punct       { border-color: #fed7aa; }
+.issue-item-backslash   { border-color: #a7f3d0; }
+.issue-item-spacing     { border-color: #e9d5ff; }
+.issue-item-slash       { border-color: #fde68a; }
+.issue-item-exclamation { border-color: #fcd34d; }
+.issue-item-capital     { border-color: #bae6fd; }
+.issue-item-nopunct     { border-color: #fca5a5; }
+.issue-item-naked_env   { border-color: #fbcfe8; }
 
 .no-issues {
   margin: 6px 0 0;
