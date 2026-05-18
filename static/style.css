@@ -426,6 +426,12 @@ body {
   border-radius: 3px;
 }
 
+.issue-paren {
+  background-color: rgba(20, 184, 166, 0.40);
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
 /* ---------------- Issues list ---------------- */
 
 .issues-section {
@@ -482,6 +488,7 @@ body {
 .issue-badge-capital     { background: #e0f2fe; color: #0369a1; }
 .issue-badge-nopunct     { background: #fee2e2; color: #991b1b; }
 .issue-badge-naked_env   { background: #fce7f3; color: #9d174d; }
+.issue-badge-paren       { background: #ccfbf1; color: #0f766e; }
 
 .issue-location {
   font-variant-numeric: tabular-nums;

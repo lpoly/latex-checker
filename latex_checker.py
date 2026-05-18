@@ -1132,6 +1132,52 @@ def fix_table_to_array(text: str):
     return result, {"replaced": count[0]}
 
 
+def find_unclosed_parens_outside_math(text: str):
+    """Find unmatched '(' or ')' characters outside math mode."""
+    math_mask = get_math_mask(text)
+    line_starts = build_line_starts(text)
+    lines = text.splitlines()
+
+    stack = []   # indices of unmatched '('
+    results = []
+
+    for idx, ch in enumerate(text):
+        if idx < len(math_mask) and math_mask[idx]:
+            continue
+
+        if ch == '(':
+            stack.append(idx)
+        elif ch == ')':
+            if stack:
+                stack.pop()
+            else:
+                line_no, col_no = index_to_line_col(idx, line_starts)
+                line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+                results.append({
+                    "kind": "paren",
+                    "index": idx,
+                    "line": line_no,
+                    "col": col_no,
+                    "char": ")",
+                    "line_text": line_text,
+                })
+
+    for idx in stack:
+        line_no, col_no = index_to_line_col(idx, line_starts)
+        line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+        results.append({
+            "kind": "paren",
+            "index": idx,
+            "line": line_no,
+            "col": col_no,
+            "char": "(",
+            "line_text": line_text,
+        })
+
+    results.sort(key=lambda x: x["index"])
+    return results
+
+
 def analyze_problem_statement(text: str):
     """Run all checks for the problem statement (everything in analyze_text plus problem-specific ones)."""
     issues = []
@@ -1143,6 +1189,7 @@ def analyze_problem_statement(text: str):
     issues.extend(find_spacing_inside_delimiters(text))
     issues.extend(find_double_backslashes(text))
     issues.extend(find_naked_math_envs(text))
+    issues.extend(find_unclosed_parens_outside_math(text))
     # Problem-specific checks
     issues.extend(find_slash_outside_math(text))
     issues.extend(find_slash_in_math(text))
@@ -1172,6 +1219,7 @@ def analyze_text(text: str):
     issues.extend(find_spacing_inside_delimiters(text))
     issues.extend(find_double_backslashes(text))
     issues.extend(find_naked_math_envs(text))
+    issues.extend(find_unclosed_parens_outside_math(text))
 
     # De-duplicate by (kind, index) and sort
     seen = set()
